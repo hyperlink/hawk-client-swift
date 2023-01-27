@@ -183,7 +183,7 @@ public class HawkClient: WebSocketDelegate {
                         reconnect()
                         return
                     }
-                    // let heardbeat fall through
+                    // let heartbeat fall through
                     return
                 }
                 notificationMessage.send(EventPayload(topic: topicName, message: json))
