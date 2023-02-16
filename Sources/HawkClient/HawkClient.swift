@@ -215,7 +215,7 @@ public class HawkClient: WebSocketDelegate {
         }
     }
     
-    public func subscribeToTopics(topics: Set<String>) async throws -> Set<String> {
+    public func subscribeToTopics(topics: Set<String>, append: Bool = false) async throws -> Set<String> {
         if topics.count > topicLimit {
             throw HawkError.topicError(message: "Topic count of \(topics.count) is more than limit of \(topicLimit)")
         }
@@ -226,7 +226,7 @@ public class HawkClient: WebSocketDelegate {
                 throw HawkError.unableToSubscribeToTopics(message: "invalid subscription URL: \(urlString)", statusCode: nil)
             }
             var urlRequest = createApiUrlRequest(url: url)
-            urlRequest.httpMethod = "PUT"
+            urlRequest.httpMethod = append ? "POST" : "PUT"
             urlRequest.httpBody = createSubscriptionPayload(topics: topics).data(using: .utf8)
             print(urlString)
             var data: Data
