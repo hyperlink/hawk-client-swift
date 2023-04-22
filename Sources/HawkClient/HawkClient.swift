@@ -53,7 +53,7 @@ public class HawkClient: WebSocketDelegate {
     }
     
     private func createAuthedUrlRequest(url: URL) -> URLRequest {
-        var urlRequest = URLRequest(url: url, timeoutInterval: 10)
+        var urlRequest = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         
         urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
@@ -88,8 +88,7 @@ public class HawkClient: WebSocketDelegate {
     private func createAndConnectSocket() throws {
         if let channelDetails {
             closeSocket()
-            var request = URLRequest(url: URL(string: channelDetails.connectURI)!)
-            request.timeoutInterval = 5
+            let request = URLRequest(url: URL(string: channelDetails.connectURI)!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 5)
             socket = WebSocket(request: request)
             if let socket {
                 socket.delegate = self
@@ -117,7 +116,7 @@ public class HawkClient: WebSocketDelegate {
     }
 
     private func reconnect() {
-        disconnect()
+        socket?.disconnect()
         DispatchQueue.global().async {
             if !self.isConnected {
                 try? self.connect()
@@ -212,6 +211,22 @@ public class HawkClient: WebSocketDelegate {
                 socketEvent.send(.error(error: error))
             }
             clearTimerIfExist()
+            if let upgradeError = error as? Starscream.HTTPUpgradeError {
+                switch upgradeError {
+                case .notAnUpgrade(let statusCode):
+                    if statusCode == 401 {
+                        Task {
+                            try? await self.renewChannel()
+                        }
+                        break
+                    }
+                    print("StatusCode \(statusCode)")
+                    fallthrough
+                case .invalidData:
+                    print("Invalid Data")
+                    try? self.createAndConnectSocket()
+                }
+            }
         }
     }
     
