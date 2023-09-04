@@ -117,11 +117,8 @@ public class HawkClient: WebSocketDelegate {
 
     private func reconnect() {
         socket?.disconnect()
-        DispatchQueue.global().async {
-            if !self.isConnected {
-                try? self.connect()
-            }
-        }
+        isConnected = false
+        try? connect()
     }
     
     private func clearTimerIfExist() {
@@ -201,10 +198,11 @@ public class HawkClient: WebSocketDelegate {
             break
         case .cancelled:
             isConnected = false
-            socketEvent.send(.connectionState(isConnected: isConnected))
             clearTimerIfExist()
+            socketEvent.send(.connectionState(isConnected: isConnected))
         
         case .error(let error):
+            handleError(error)
             isConnected = false
             socketEvent.send(.connectionState(isConnected: isConnected))
             if let error {
@@ -227,6 +225,16 @@ public class HawkClient: WebSocketDelegate {
                     try? self.createAndConnectSocket()
                 }
             }
+        }
+    }
+    
+    private func handleError(_ error: Error?) {
+        if let e = error as? WSError {
+            print("websocket encountered an error: \(e.message)")
+        } else if let e = error {
+            print("websocket encountered an error: \(e.localizedDescription)")
+        } else {
+            print("websocket encountered an error")
         }
     }
     
