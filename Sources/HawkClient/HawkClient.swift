@@ -107,11 +107,6 @@ public class HawkClient: WebSocketDelegate {
         if !isExpiredChannel() {
             throw HawkError.expiredChannel
         }
-        if socket != nil {
-            print("socket is already created. connecting.")
-            socket?.connect()
-            return
-        }
         try createAndConnectSocket()
     }
 
