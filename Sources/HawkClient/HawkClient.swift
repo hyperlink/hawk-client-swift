@@ -137,7 +137,7 @@ public class HawkClient: WebSocketDelegate {
         socket?.disconnect()
     }
     
-    public func didReceive(event: Starscream.WebSocketEvent, client: Starscream.WebSocket) {
+    public func didReceive(event: Starscream.WebSocketEvent, client: Starscream.WebSocketClient) {
         switch event {
         case .connected(let headers):
             isConnected = true
@@ -206,7 +206,7 @@ public class HawkClient: WebSocketDelegate {
             clearTimerIfExist()
             if let upgradeError = error as? Starscream.HTTPUpgradeError {
                 switch upgradeError {
-                case .notAnUpgrade(let statusCode):
+                case .notAnUpgrade(let statusCode, _):
                     if statusCode == 401 {
                         Task {
                             try? await self.renewChannel()
@@ -220,6 +220,9 @@ public class HawkClient: WebSocketDelegate {
                     try? self.createAndConnectSocket()
                 }
             }
+            
+        case .peerClosed:
+            print("peerClosed")
         }
     }
     

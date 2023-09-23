@@ -15,7 +15,7 @@ let package = Package(
             targets: ["HawkClient"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/daltoniam/Starscream.git", .upToNextMinor(from: "4.0.4")),
+        .package(url: "https://github.com/daltoniam/Starscream.git", .upToNextMinor(from: "4.0.6")),
         .package(url: "https://github.com/SwiftyJSON/SwiftyJSON.git", from: "5.0.1"),
     ],
     targets: [
