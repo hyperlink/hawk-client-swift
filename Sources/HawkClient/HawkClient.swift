@@ -36,8 +36,15 @@ public class HawkClient: WebSocketDelegate {
     
     private var userDisconnect = false
     
-    public let notificationMessage = PassthroughSubject<EventPayload, Never>()
-    public let socketEvent = PassthroughSubject<HawkEvent, Never>()
+    public var notificationMessage: AnyPublisher<EventPayload, Never> {
+        internalNotificationMessage.eraseToAnyPublisher()
+    }
+    public var socketEvent: AnyPublisher<HawkEvent, Never> {
+        internalSocketEvent.eraseToAnyPublisher()
+    }
+    
+    private let internalSocketEvent = PassthroughSubject<HawkEvent, Never>()
+    private let internalNotificationMessage = PassthroughSubject<EventPayload, Never>()
     
     // constants
     private let heartbeatTimeoutSeconds = 35.0
@@ -141,14 +148,14 @@ public class HawkClient: WebSocketDelegate {
         switch event {
         case .connected(let headers):
             isConnected = true
-            socketEvent.send(.connectionState(isConnected: isConnected, headers: headers))
+            internalSocketEvent.send(.connectionState(isConnected: isConnected, headers: headers))
             print("websocket is connected: \(headers)")
             startTimer()
             userDisconnect = false
             
         case .disconnected(let reason, let code):
             isConnected = false
-            socketEvent.send(.connectionState(isConnected: isConnected))
+            internalSocketEvent.send(.connectionState(isConnected: isConnected))
             print("websocket is disconnected: \(reason) with code: \(code)")
             clearTimerIfExist()
             
@@ -177,9 +184,9 @@ public class HawkClient: WebSocketDelegate {
                     // let heartbeat fall through
                     return
                 }
-                notificationMessage.send(EventPayload(topic: topicName, message: json))
+                internalNotificationMessage.send(EventPayload(topic: topicName, message: json))
             } else {
-                socketEvent.send(.error(error: HawkError.invalidMessage(message: "Event has no 'topicName' field: \"\(string)\"")))
+                internalSocketEvent.send(.error(error: HawkError.invalidMessage(message: "Event has no 'topicName' field: \"\(string)\"")))
             }
         case .binary(let data):
             print("Received data: \(data.count)")
@@ -194,14 +201,14 @@ public class HawkClient: WebSocketDelegate {
         case .cancelled:
             isConnected = false
             clearTimerIfExist()
-            socketEvent.send(.connectionState(isConnected: isConnected))
+            internalSocketEvent.send(.connectionState(isConnected: isConnected))
         
         case .error(let error):
             handleError(error)
             isConnected = false
-            socketEvent.send(.connectionState(isConnected: isConnected))
+            internalSocketEvent.send(.connectionState(isConnected: isConnected))
             if let error {
-                socketEvent.send(.error(error: error))
+                internalSocketEvent.send(.error(error: error))
             }
             clearTimerIfExist()
             if let upgradeError = error as? Starscream.HTTPUpgradeError {
