@@ -9,7 +9,7 @@ public enum HawkEvent {
 }
 
 public class HawkClient: WebSocketDelegate {
-    enum HawkError: Error {
+    public enum HawkError: Error {
         case unableToCreateChannel(message: String, statusCode: Int?)
         case unableToSubscribeToTopics(message: String, statusCode: Int?)
         case invalidToken
@@ -106,12 +106,17 @@ public class HawkClient: WebSocketDelegate {
         }
     }
     
-    public func connect() throws {
+    public func connect(rewnewExpired: Bool = true) throws {
         if channelDetails == nil {
             throw HawkError.missingChannel
         }
         
         if !isExpiredChannel() {
+            if rewnewExpired {
+                Task {
+                    try await renewChannel()
+                }
+            }                
             throw HawkError.expiredChannel
         }
         try createAndConnectSocket()
@@ -317,6 +322,7 @@ public class HawkClient: WebSocketDelegate {
     
     private func createChannel() async throws {
         let urlString = "https://\(apiPrefix).\(host)/api/v2/notifications/channels"
+        print("Creating channel: \(urlString)")
         guard let url = URL(string: urlString) else {
             throw HawkError.unableToCreateChannel(message: "Invalid URL: \(urlString)", statusCode: nil)
         }
@@ -326,6 +332,7 @@ public class HawkClient: WebSocketDelegate {
             let (data, response) = try await URLSession.shared.data(for: urlRequest)
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 401 {
+                    print("Invalid token response: \(String(data: data, encoding: .utf8) ?? "empty")")
                     throw HawkError.invalidToken
                 }
                 if httpResponse.statusCode != 200 {
