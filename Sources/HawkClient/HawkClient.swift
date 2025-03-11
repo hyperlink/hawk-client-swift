@@ -19,33 +19,33 @@ public class HawkClient: WebSocketDelegate {
         case topicError(message: String)
         case clientError(message: String)
     }
-        
+
     public struct EventPayload {
         public let topic: String
         public let message: JSON
     }
-    
+
     public private(set) var channelDetails: ChannelResponse?
     public private(set) var isConnected: Bool = false
-    
+
     private var authToken: String
     private var host: String
     public private(set) var subscribedTopics: Set<String> = Set()
     private var socket: WebSocket?
     private var heartbeatTimer: Timer?
-    
+
     private var userDisconnect = false
-    
+
     public var notificationMessage: AnyPublisher<EventPayload, Never> {
         internalNotificationMessage.eraseToAnyPublisher()
     }
     public var socketEvent: AnyPublisher<HawkEvent, Never> {
         internalSocketEvent.eraseToAnyPublisher()
     }
-    
+
     private let internalSocketEvent = PassthroughSubject<HawkEvent, Never>()
     private let internalNotificationMessage = PassthroughSubject<EventPayload, Never>()
-    
+
     // constants
     private let heartbeatTimeoutSeconds = 35.0
     private let topicLimit = 1000
@@ -58,32 +58,32 @@ public class HawkClient: WebSocketDelegate {
         self.authToken = token
         self.host = host
     }
-    
+
     private func createAuthedUrlRequest(url: URL) -> URLRequest {
         var urlRequest = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
-        
+
         urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        
+
         return urlRequest
     }
-    
+
     private func createApiUrlRequest(url: URL) -> URLRequest {
         var urlRequest = createAuthedUrlRequest(url: url)
-        
+
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
-        
+
         return urlRequest
     }
-    
-    private func isExpiredChannel() -> Bool {
+
+    private func isValidChannel() -> Bool {
         if let channelDetails {
-            return channelDetails.expires >= .now
+            return channelDetails.expires > .now
         }
         return false
     }
-    
+
     private func closeSocket() {
         if let socket {
             socket.delegate = nil
@@ -91,7 +91,7 @@ public class HawkClient: WebSocketDelegate {
             self.socket = nil
         }
     }
-    
+
     private func createAndConnectSocket() throws {
         if let channelDetails {
             closeSocket()
@@ -105,18 +105,18 @@ public class HawkClient: WebSocketDelegate {
             throw HawkError.missingChannel
         }
     }
-    
-    public func connect(rewnewExpired: Bool = true) throws {
+
+    public func connect(renewExpired: Bool = true) throws {
         if channelDetails == nil {
             throw HawkError.missingChannel
         }
-        
-        if !isExpiredChannel() {
-            if rewnewExpired {
+
+        if !isValidChannel() {
+            if renewExpired {
                 Task {
                     try await renewChannel()
                 }
-            }                
+            }
             throw HawkError.expiredChannel
         }
         try createAndConnectSocket()
@@ -127,7 +127,7 @@ public class HawkClient: WebSocketDelegate {
         isConnected = false
         try? connect()
     }
-    
+
     private func clearTimerIfExist() {
         // clear previous timer
         if heartbeatTimer != nil {
@@ -135,20 +135,20 @@ public class HawkClient: WebSocketDelegate {
             heartbeatTimer = nil
         }
     }
-    
+
     private func startTimer() {
         clearTimerIfExist()
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: heartbeatTimeoutSeconds, repeats: false) { _ in
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: heartbeatTimeoutSeconds, repeats: false) {[weak self] _ in
             print("Hawk heartbeat expired!")
-            self.reconnect()
+            self?.reconnect()
         }
     }
-    
+
     public func disconnect() {
         userDisconnect = true
         socket?.disconnect()
     }
-    
+
     public func didReceive(event: Starscream.WebSocketEvent, client: Starscream.WebSocketClient) {
         switch event {
         case .connected(let headers):
@@ -157,16 +157,16 @@ public class HawkClient: WebSocketDelegate {
             print("websocket is connected: \(headers)")
             startTimer()
             userDisconnect = false
-            
+
         case .disconnected(let reason, let code):
             isConnected = false
             internalSocketEvent.send(.connectionState(isConnected: isConnected))
             print("websocket is disconnected: \(reason) with code: \(code)")
             clearTimerIfExist()
-            
+
             if !userDisconnect && channelDetails != nil {
                 // unexpected disconnect from an expired channel
-                if isExpiredChannel() {
+                if !isValidChannel() {
                     Task {
                         try? await renewChannel()
                     }
@@ -176,7 +176,7 @@ public class HawkClient: WebSocketDelegate {
                     }
                 }
             }
-            
+
         case .text(let string):
             startTimer()
             let json = JSON(parseJSON: string)
@@ -207,7 +207,7 @@ public class HawkClient: WebSocketDelegate {
             isConnected = false
             clearTimerIfExist()
             internalSocketEvent.send(.connectionState(isConnected: isConnected))
-        
+
         case .error(let error):
             handleError(error)
             isConnected = false
@@ -232,12 +232,12 @@ public class HawkClient: WebSocketDelegate {
                     try? self.createAndConnectSocket()
                 }
             }
-            
+
         case .peerClosed:
             print("peerClosed")
         }
     }
-    
+
     private func handleError(_ error: Error?) {
         if let e = error as? WSError {
             print("websocket encountered an error: \(e.message)")
@@ -247,7 +247,7 @@ public class HawkClient: WebSocketDelegate {
             print("websocket encountered an error")
         }
     }
-    
+
     public func subscribeToTopics(topics: Set<String>, append: Bool = false) async throws -> Set<String> {
         if topics.count > topicLimit {
             throw HawkError.topicError(message: "Topic count of \(topics.count) is more than limit of \(topicLimit)")
@@ -280,7 +280,7 @@ public class HawkClient: WebSocketDelegate {
             } catch {
                 throw HawkError.unableToSubscribeToTopics(message: error.localizedDescription, statusCode: nil)
             }
-            
+
             do {
                 let result = try JSONDecoder().decode(SubscriptionResponse.self, from: data)
                 for entity in result.entities {
@@ -294,7 +294,7 @@ public class HawkClient: WebSocketDelegate {
             throw HawkError.missingChannel
         }
     }
-    
+
     private func renewChannel() async throws {
         do {
             try await createChannel()
@@ -306,20 +306,27 @@ public class HawkClient: WebSocketDelegate {
             throw HawkError.clientError(message: error.localizedDescription)
         }
     }
-    
+
     private func getChannel() async throws -> ChannelResponse {
-        if channelDetails != nil {
-            return channelDetails!
+        if let details = channelDetails {
+            return details
+        } else {
+            try await createChannel()
+            guard let details = channelDetails else {
+                throw HawkError.missingChannel
+            }
+            return details
         }
-        try await createChannel()
-        return channelDetails!
     }
-    
+
     private func createSubscriptionPayload(topics: Set<String>) -> String {
         let json = JSON(topics.map({ ["id" : $0] }))
-        return json.rawString()!
+        guard let jsonString = json.rawString() else {
+            return "[]" // Default empty array
+        }
+        return jsonString
     }
-    
+
     private func createChannel() async throws {
         let urlString = "https://\(apiPrefix).\(host)/api/v2/notifications/channels"
         print("Creating channel: \(urlString)")
